@@ -25,7 +25,9 @@ export default function BookmarkList({ user }: any) {
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "bookmarks" },
-        () => fetchBookmarks()
+        () => {
+          fetchBookmarks();
+        }
       )
       .subscribe();
 
@@ -37,10 +39,20 @@ export default function BookmarkList({ user }: any) {
   const addBookmark = async () => {
     if (!title || !url) return;
 
+    let formattedUrl = url;
+
+    // Auto-add https if missing
+    if (
+      !formattedUrl.startsWith("http://") &&
+      !formattedUrl.startsWith("https://")
+    ) {
+      formattedUrl = "https://" + formattedUrl;
+    }
+
     await supabase.from("bookmarks").insert([
       {
         title,
-        url,
+        url: formattedUrl,
         user_id: user.id,
       },
     ]);
@@ -82,7 +94,12 @@ export default function BookmarkList({ user }: any) {
             key={bookmark.id}
             className="bg-white p-3 mb-2 rounded shadow flex justify-between"
           >
-            <a href={bookmark.url} target="_blank">
+            <a
+              href={bookmark.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:underline"
+            >
               {bookmark.title}
             </a>
             <button
