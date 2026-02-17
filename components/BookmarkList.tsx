@@ -8,15 +8,19 @@ export default function BookmarkList({ user }: any) {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
 
+  // Fetch all bookmarks
   const fetchBookmarks = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("bookmarks")
       .select("*")
       .order("created_at", { ascending: false });
 
-    setBookmarks(data || []);
+    if (!error && data) {
+      setBookmarks(data);
+    }
   };
 
+  // Realtime subscription
   useEffect(() => {
     fetchBookmarks();
 
@@ -24,7 +28,11 @@ export default function BookmarkList({ user }: any) {
       .channel("realtime bookmarks")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "bookmarks" },
+        {
+          event: "*",
+          schema: "public",
+          table: "bookmarks",
+        },
         () => {
           fetchBookmarks();
         }
@@ -36,12 +44,12 @@ export default function BookmarkList({ user }: any) {
     };
   }, []);
 
+  // Add bookmark (instant UI update + auto open)
   const addBookmark = async () => {
     if (!title || !url) return;
 
     let formattedUrl = url;
 
-    // Auto-add https if missing
     if (
       !formattedUrl.startsWith("http://") &&
       !formattedUrl.startsWith("https://")
@@ -49,20 +57,35 @@ export default function BookmarkList({ user }: any) {
       formattedUrl = "https://" + formattedUrl;
     }
 
-    await supabase.from("bookmarks").insert([
-      {
-        title,
-        url: formattedUrl,
-        user_id: user.id,
-      },
-    ]);
+    const { data, error } = await supabase
+      .from("bookmarks")
+      .insert([
+        {
+          title,
+          url: formattedUrl,
+          user_id: user.id,
+        },
+      ])
+      .select();
+
+    if (!error && data) {
+      // Instant UI update
+      setBookmarks((prev) => [data[0], ...prev]);
+
+      // Automatically open the saved website
+      window.open(formattedUrl, "_blank");
+    }
 
     setTitle("");
     setUrl("");
   };
 
+  // Delete bookmark
   const deleteBookmark = async (id: string) => {
     await supabase.from("bookmarks").delete().eq("id", id);
+
+    // Instant UI removal
+    setBookmarks((prev) => prev.filter((item) => item.id !== id));
   };
 
   return (
@@ -74,15 +97,17 @@ export default function BookmarkList({ user }: any) {
           value={title}
           onChange={(e) => setTitle(e.target.value)}
         />
+
         <input
           placeholder="URL"
           className="border p-2 flex-1"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
         />
+
         <button
           onClick={addBookmark}
-          className="bg-green-600 text-white px-4"
+          className="bg-green-600 text-white px-4 rounded"
         >
           Add
         </button>
@@ -92,7 +117,7 @@ export default function BookmarkList({ user }: any) {
         {bookmarks.map((bookmark) => (
           <li
             key={bookmark.id}
-            className="bg-white p-3 mb-2 rounded shadow flex justify-between"
+            className="bg-white p-3 mb-2 rounded shadow flex justify-between items-center"
           >
             <a
               href={bookmark.url}
@@ -102,6 +127,7 @@ export default function BookmarkList({ user }: any) {
             >
               {bookmark.title}
             </a>
+
             <button
               onClick={() => deleteBookmark(bookmark.id)}
               className="text-red-500"
